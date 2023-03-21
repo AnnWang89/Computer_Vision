@@ -127,6 +127,10 @@ def Normal_Calculation(path, light_lst):
                 IMG6[x][y]
             ])
 
+            I_mean = np.mean(I)
+            I_std = np.std(I)
+            I_correct = (I-I_mean)/(I_std + 1e-6)
+
             # 計算KN
             KdN = np.dot(np.dot(np.linalg.inv(
                 np.dot(light_lst.T, light_lst)), light_lst.T), I)
@@ -144,9 +148,8 @@ def Normal_Calculation(path, light_lst):
             #        continue
             #    N_lst[x][y][k] = KdN[k]/KdN_norm
 
-    # 控制在0到255間
-    # N_lst = ((N_lst*0.5 + 0.5)*255).astype(np.uint8)
     normal_visualization(N_lst)
+
     # print("N_lst:\n", N_lst)
 
     return N_lst
@@ -237,18 +240,36 @@ def Depth_Calculation(N_lst):
     # mean and std
     std_z = np.std(z, ddof=1)
     mean_z = np.mean(z)
-    # z_zscore = (z - mean_z) / std_z
-    # outlier_ind = np.abs(z_zscore) > 10
-    # z_min = np.min(z[~outlier_ind])
-    # z_max = np.max(z[~outlier_ind])
+    z_zscore = (z - mean_z) / std_z
+    outlier_ind = np.abs(z_zscore) > 5
+    z_min = np.min(z[~outlier_ind])
+    z_max = np.max(z[~outlier_ind])
 
     # create a same shape of mask
     Z = Mask.astype('float')
     for idx in range(num_pixel):
         row = obj_index_row[idx]
         col = obj_index_col[idx]
-        # Z[row,col] = (z[idx] - z_min) / (z_max - z_min) * 255
-        Z[row, col] = z[idx]
+
+        if z[idx] < z_min:
+            Z[row, col] = z_min
+        elif z[idx] > z_max:
+            Z[row, col] = z_max
+        else:
+            Z[row, col] = z[idx]
+
+    for idx in range(num_pixel):
+        row = obj_index_row[idx]
+        col = obj_index_col[idx]
+
+        pixel = np.array([Z[row-1, col-1], Z[row-1, col], Z[row-1, col+1], Z[row, col-1],
+                         Z[row, col+1], Z[row+1, col-1], Z[row+1, col], Z[row+1, col-1]])
+        std_pixel = np.std(pixel, ddof=1)
+        mean_pixel = np.mean(pixel)
+        pixel_zscore = (z[idx] - mean_pixel) / std_pixel
+
+        if pixel_zscore > 0.5:
+            Z[row, col] = mean_pixel
 
     depth_visualization(Z)
     return Z
@@ -275,9 +296,8 @@ if __name__ == '__main__':
     photometric_stereo(path1)
     photometric_stereo(path2)
     photometric_stereo(path3)
-    # depth_visualization(Z)
-    # save_ply(Z,filepath)
-    # show_ply(filepath)
+
+    # show_ply("./test/bunny/bunny.ply")
 
     # showing the windows of all visualization function
     plt.show()
